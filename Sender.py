@@ -17,13 +17,13 @@ class Sender(BasicSender.BasicSender):
 
     def printsend(self, pck):
         pieces = pck.split('|')
-        pck_seq = int(pieces[1])
+        msg_type, pck_seq = pieces[0:2]
         msg = '|'.join(pieces[2:-1])
         checksum = pieces[-1]
-        print "send ", pck_seq, checksum
-        print "+++++++++++++++++++++++++++++++++++++++++++"
-        print msg
-        print "*******************************************"
+        print "send ", msg_type, pck_seq, checksum
+        # print "+++++++++++++++++++++++++++++++++++++++++++"
+        # print msg
+        # print "*******************************************"
 
 
     def check_packet(self, r_pck):
@@ -62,15 +62,13 @@ class Sender(BasicSender.BasicSender):
         return
 
 
-    def fill_window(self, window, partition_unfin, window_seq):
-        end_seq = 0
+    def fill_window(self, window, partition_unfin, window_seq, end_seq):
         while len(window) < 7 and partition_unfin:
-            print "fill ", len(window)
             msg = self.infile.read(1472)
             if (msg != ''):
                 pck_seq = window_seq + len(window)
                 pck = self.make_packet('dat', pck_seq, msg)
-                print "append ", pck_seq
+                # print "append ", pck_seq
                 window.append(pck)
             else:
                 partition_unfin = 0
@@ -90,15 +88,15 @@ class Sender(BasicSender.BasicSender):
         window_seqno = seqno + 1
         send_unfin = 1
         partition_unfin = 1
+        end_seq = 0
         msg_type = 'dat'
-        msg = self.infile.read(1472)
-        window, partition_unfin, end_seq = self.fill_window(window, partition_unfin, window_seqno)
+        window, partition_unfin, end_seq = self.fill_window(window, partition_unfin, window_seqno, end_seq)
 
         while send_unfin:
             for pck in window:
                 self.printsend(pck)
                 self.send(pck)
-            for i in range(7):
+            for i in range(len(window)):
                 r_pck = self.receive(0.5)
                 print "r_pck: ", r_pck
                 if r_pck != None:
@@ -106,10 +104,12 @@ class Sender(BasicSender.BasicSender):
                     if r_seqno == end_seq + 1:
                         send_unfin = 0
                         break
-                    elif r_seqno == window_seqno + 1 and r_sum:
-                        window_seqno = window_seqno +1
+                    elif r_seqno > window_seqno and r_sum:
+                        window_seqno = r_seqno
+                        for i in range(r_seqno - window_seqno):
+                            window.pop(0)
 
-            window, partition_unfin, end_seq = self.fill_window(window, partition_unfin, window_seqno)
+            window, partition_unfin, end_seq = self.fill_window(window, partition_unfin, window_seqno,end_seq)
         return
 
     # Main sending loop.
