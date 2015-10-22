@@ -19,6 +19,14 @@ class Sender(BasicSender.BasicSender):
         print "send ", pck
         print "++++++++++++++++++++++++++++++++"
 
+
+    def check_packet(self, r_pck):
+        pieces = r_pck.split('|')
+        seqno = int(pieces[1])
+        return seqno, Checksum.validate_checksum(r_pck)
+
+
+
     # Main sending loop.
     def start(self):
         print "handshake"
@@ -26,15 +34,19 @@ class Sender(BasicSender.BasicSender):
         msg_type = 'syn'
         msg = ''
         pck = self.make_packet(msg_type, seqno, msg)
-        r_msg = None
+        r_pck = None
         r_seqno = 0
-        while r_msg == None or r_seqno != seqno + 1:
+        r_sum = True
+        while r_pck == None or r_seqno != seqno + 1 or not r_sum:
             self.send(pck)
-            r_msg = self.receive(500)
-            pieces = r_msg.split('|')
-            r_seqno = int(pieces[1])
+            r_pck = self.receive(0.5)
+            print 'r_pck ', r_pck
+            if r_pck != None:
+                r_seqno, r_sum = self.check_packet(r_pck)
+
         print r_seqno
         print "handshake success"
+
         print "================send data================"
         unfinished = 1
         msg_type = 'dat'
@@ -46,17 +58,20 @@ class Sender(BasicSender.BasicSender):
                 print unfinished
             else:
                 print "unfinished"
-                r_msg = None
+                r_pck = None
                 r_seqno = 0
+                r_sum = 0
+                body = "%s|%d|%s|" % (msg_type,seqno,msg)
+                csum = Checksum.generate_checksum(body)
                 pck = self.make_packet(msg_type, seqno, msg)
-                while r_msg == None or r_seqno != seqno + 1: 
+                while r_pck == None or r_seqno != seqno + 1 or not r_sum: 
                     self.send(pck)
                     print 'send ',seqno
                     # printpck(pck)
-                    r_msg = self.receive(500)
-                    print r_msg
-                    pieces = r_msg.split('|')
-                    r_seqno = int(pieces[1])
+                    r_pck = self.receive(0.5)
+                    print r_pck
+                    if r_pck != None:
+                        r_seqno, r_sum = self.check_packet(r_pck)
         exit()
 
 
