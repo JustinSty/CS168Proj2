@@ -31,48 +31,44 @@ class Sender(BasicSender.BasicSender):
     def start(self):
         print "handshake"
         seqno = randint(1, 2**31)
-        msg_type = 'syn'
-        msg = ''
-        pck = self.make_packet(msg_type, seqno, msg)
+        pck = self.make_packet('syn', seqno, '')
         r_pck = None
         r_seqno = 0
         r_sum = True
         while r_pck == None or r_seqno != seqno + 1 or not r_sum:
             self.send(pck)
             r_pck = self.receive(0.5)
-            print 'r_pck ', r_pck
             if r_pck != None:
                 r_seqno, r_sum = self.check_packet(r_pck)
-
-        print r_seqno
         print "handshake success"
 
         #simple stop and wait
         print "================send data================"
         unfinished = 1
         msg_type = 'dat'
+        msg = self.infile.read(1472)
         while unfinished:
-            msg = self.infile.read(1472)
+            next_msg = self.infile.read(1472)
             seqno = seqno + 1
-            if msg == '':
+            if next_msg == '':
                 unfinished = 0
-                print unfinished
-            else:
-                print "unfinished"
-                r_pck = None
-                r_seqno = 0
-                r_sum = 0
-                body = "%s|%d|%s|" % (msg_type,seqno,msg)
-                csum = Checksum.generate_checksum(body)
-                pck = self.make_packet(msg_type, seqno, msg)
-                while r_pck == None or r_seqno != seqno + 1 or not r_sum: 
-                    self.send(pck)
-                    print 'send ',seqno
-                    # printpck(pck)
-                    r_pck = self.receive(0.5)
-                    print r_pck
-                    if r_pck != None:
-                        r_seqno, r_sum = self.check_packet(r_pck)
+                msg_type = 'fin'
+
+            print "unfinished"
+            r_pck = None
+            r_seqno = 0
+            r_sum = 0
+            pck = self.make_packet(msg_type, seqno, msg)
+            while r_pck == None or r_seqno != seqno + 1 or not r_sum: 
+                self.send(pck)
+                print 'send ',seqno
+                # printpck(pck)
+                r_pck = self.receive(0.5)
+                print r_pck
+                if r_pck != None:
+                    r_seqno, r_sum = self.check_packet(r_pck)
+            msg = next_msg
+
         exit()
 
 
