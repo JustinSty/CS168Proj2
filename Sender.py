@@ -68,7 +68,6 @@ class Sender(BasicSender.BasicSender):
             if (msg != ''):
                 pck_seq = window_seq + len(window)
                 pck = self.make_packet('dat', pck_seq, msg)
-                # print "append ", pck_seq
                 window.append(pck)
             else:
                 partition_unfin = 0
@@ -102,15 +101,12 @@ class Sender(BasicSender.BasicSender):
                 print "r_pck: ", r_pck
                 if r_pck != None:
                     r_seqno, r_sum = self.check_packet(r_pck)
-                    # print "r_seqno ",r_seqno
-                    # print "window_seqno ", window_seqno
                     if r_seqno == end_seq + 1:
                         send_unfin = 0
                         break
                     elif r_seqno > window_seqno and r_sum:
                         for i in range(r_seqno - window_seqno):
                             window.pop(0)
-                            # print("pop")
                         window_seqno = r_seqno
                     elif r_seqno == window_seqno and r_sum:
                         repeat = repeat + 1
@@ -138,7 +134,7 @@ class Sender(BasicSender.BasicSender):
         print "handshake success"
 
         # self.stop_and_wait(seqno)
-        self.simple_window(seqno)
+        self.simple_window(seqno)   #with fast retransmit
         
         exit()
 
