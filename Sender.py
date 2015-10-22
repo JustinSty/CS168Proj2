@@ -1,5 +1,6 @@
 import sys
 import getopt
+from random import randint
 
 import Checksum
 import BasicSender
@@ -13,10 +14,52 @@ class Sender(BasicSender.BasicSender):
         self.sackMode = sackMode
         self.debug = debug
 
+    def printpck(pck):
+        print "********************************"
+        print "send ", pck
+        print "++++++++++++++++++++++++++++++++"
+
     # Main sending loop.
     def start(self):
-      # add things here
-      pass
+        print "handshake"
+        seqno = randint(1, 2**31)
+        msg_type = 'syn'
+        msg = ''
+        pck = self.make_packet(msg_type, seqno, msg)
+        r_msg = None
+        r_seqno = 0
+        while r_msg == None or r_seqno != seqno + 1:
+            self.send(pck)
+            r_msg = self.receive(500)
+            pieces = r_msg.split('|')
+            r_seqno = int(pieces[1])
+        print r_seqno
+        print "handshake success"
+        print "================send data================"
+        unfinished = 1
+        msg_type = 'dat'
+        while unfinished:
+            msg = self.infile.read(1472)
+            seqno = seqno + 1
+            if msg == '':
+                unfinished = 0
+                print unfinished
+            else:
+                print "unfinished"
+                r_msg = None
+                r_seqno = 0
+                pck = self.make_packet(msg_type, seqno, msg)
+                while r_msg == None or r_seqno != seqno + 1: 
+                    self.send(pck)
+                    print 'send ',seqno
+                    # printpck(pck)
+                    r_msg = self.receive(500)
+                    print r_msg
+                    pieces = r_msg.split('|')
+                    r_seqno = int(pieces[1])
+        exit()
+
+
         
 '''
 This will be run if you run this script from the command line. You should not
