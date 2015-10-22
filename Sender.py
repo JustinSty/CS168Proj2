@@ -14,10 +14,16 @@ class Sender(BasicSender.BasicSender):
         self.sackMode = sackMode
         self.debug = debug
 
-    def printpck(pck):
-        print "********************************"
-        print "send ", pck
-        print "++++++++++++++++++++++++++++++++"
+
+    def printsend(self, pck):
+        pieces = pck.split('|')
+        pck_seq = int(pieces[1])
+        msg = '|'.join(pieces[2:-1])
+        checksum = pieces[-1]
+        print "send ", pck_seq, checksum
+        print "+++++++++++++++++++++++++++++++++++++++++++"
+        print msg
+        print "*******************************************"
 
 
     def check_packet(self, r_pck):
@@ -26,22 +32,7 @@ class Sender(BasicSender.BasicSender):
         return seqno, Checksum.validate_checksum(r_pck)
 
 
-
-    # Main sending loop.
-    def start(self):
-        print "handshake"
-        seqno = randint(1, 2**31)
-        pck = self.make_packet('syn', seqno, '')
-        r_pck = None
-        r_seqno = 0
-        r_sum = True
-        while r_pck == None or r_seqno != seqno + 1 or not r_sum:
-            self.send(pck)
-            r_pck = self.receive(0.5)
-            if r_pck != None:
-                r_seqno, r_sum = self.check_packet(r_pck)
-        print "handshake success"
-
+    def stop_and_wait(self, seqno):
         #simple stop and wait
         print "================send data================"
         unfinished = 1
@@ -68,6 +59,77 @@ class Sender(BasicSender.BasicSender):
                 if r_pck != None:
                     r_seqno, r_sum = self.check_packet(r_pck)
             msg = next_msg
+        return
+
+
+    def fill_window(self, window, partition_unfin, window_seq):
+        end_seq = 0
+        while len(window) < 7 and partition_unfin:
+            print "fill ", len(window)
+            msg = self.infile.read(1472)
+            if (msg != ''):
+                pck_seq = window_seq + len(window)
+                pck = self.make_packet('dat', pck_seq, msg)
+                print "append ", pck_seq
+                window.append(pck)
+            else:
+                partition_unfin = 0
+                pck = window.pop()
+                pieces = pck.split('|')
+                pck_seq = int(pieces[1])
+                msg = '|'.join(pieces[2:-1])
+                pck = self.make_packet('fin', pck_seq, msg)
+                window.append(pck)
+                end_seq = pck_seq
+        return window, partition_unfin, end_seq
+
+
+    def simple_window(self, seqno):
+        print "================window send data================"
+        window = []
+        window_seqno = seqno + 1
+        send_unfin = 1
+        partition_unfin = 1
+        msg_type = 'dat'
+        msg = self.infile.read(1472)
+        window, partition_unfin, end_seq = self.fill_window(window, partition_unfin, window_seqno)
+
+        while send_unfin:
+            for pck in window:
+                self.printsend(pck)
+                self.send(pck)
+            for i in range(7):
+                r_pck = self.receive(0.5)
+                print "r_pck: ", r_pck
+                if r_pck != None:
+                    r_seqno, r_sum = self.check_packet(r_pck)
+                    if r_seqno == end_seq + 1:
+                        send_unfin = 0
+                        break
+                    elif r_seqno == window_seqno + 1 and r_sum:
+                        window_seqno = window_seqno +1
+
+            window, partition_unfin, end_seq = self.fill_window(window, partition_unfin, window_seqno)
+        return
+
+    # Main sending loop.
+    def start(self):
+        print "handshake"
+        seqno = randint(1, 2**31)
+        pck = self.make_packet('syn', seqno, '')
+        r_pck = None
+        r_seqno = 0
+        r_sum = True
+        while r_pck == None or r_seqno != seqno + 1 or not r_sum:
+            self.send(pck)
+            r_pck = self.receive(0.5)
+            if r_pck != None:
+                r_seqno, r_sum = self.check_packet(r_pck)
+        print "handshake success"
+
+        # self.stop_and_wait(seqno)
+        self.simple_window(seqno)
+        
 
         exit()
 
