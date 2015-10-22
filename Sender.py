@@ -47,6 +47,7 @@ class Sender(BasicSender.BasicSender):
         print r_seqno
         print "handshake success"
 
+        #simple stop and wait
         print "================send data================"
         unfinished = 1
         msg_type = 'dat'
