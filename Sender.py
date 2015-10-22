@@ -91,6 +91,7 @@ class Sender(BasicSender.BasicSender):
         end_seq = 0
         msg_type = 'dat'
         window, partition_unfin, end_seq = self.fill_window(window, partition_unfin, window_seqno, end_seq)
+        repeat = 0
 
         while send_unfin:
             for pck in window:
@@ -101,13 +102,22 @@ class Sender(BasicSender.BasicSender):
                 print "r_pck: ", r_pck
                 if r_pck != None:
                     r_seqno, r_sum = self.check_packet(r_pck)
+                    # print "r_seqno ",r_seqno
+                    # print "window_seqno ", window_seqno
                     if r_seqno == end_seq + 1:
                         send_unfin = 0
                         break
                     elif r_seqno > window_seqno and r_sum:
-                        window_seqno = r_seqno
                         for i in range(r_seqno - window_seqno):
                             window.pop(0)
+                            # print("pop")
+                        window_seqno = r_seqno
+                    elif r_seqno == window_seqno and r_sum:
+                        repeat = repeat + 1
+                        # print "!!!!!!!!!!!!!!repeat", repeat
+                        if repeat >= 3:
+                            repeat = 0
+                            break
 
             window, partition_unfin, end_seq = self.fill_window(window, partition_unfin, window_seqno,end_seq)
         return
@@ -130,7 +140,6 @@ class Sender(BasicSender.BasicSender):
         # self.stop_and_wait(seqno)
         self.simple_window(seqno)
         
-
         exit()
 
 
