@@ -27,9 +27,23 @@ class Sender(BasicSender.BasicSender):
 
 
     def check_packet(self, r_pck):
-        pieces = r_pck.split('|')
-        seqno = int(pieces[1])
-        return seqno, Checksum.validate_checksum(r_pck)
+        if self.sackMode:
+            pieces = r_pck.split('|')
+            seqnums = pieces[1]
+            sackpieces =  seqnums.split(';')
+            seqno = int(sackpieces[0])
+            sack_str = sackpieces[1]
+            sacks = []
+            if sack_str != '':
+                sack_str = sackpieces[1].split(',')
+                for i in sack_str:
+                    sacks.append(int(i))
+
+            return seqno, Checksum.validate_checksum(r_pck), sacks
+        else:
+            pieces = r_pck.split('|')
+            seqno = int(pieces[1])
+            return seqno, Checksum.validate_checksum(r_pck), []
 
 
     def stop_and_wait(self, seqno):
@@ -45,7 +59,6 @@ class Sender(BasicSender.BasicSender):
                 unfinished = 0
                 msg_type = 'fin'
 
-            print "unfinished"
             r_pck = None
             r_seqno = 0
             r_sum = 0
@@ -57,7 +70,8 @@ class Sender(BasicSender.BasicSender):
                 r_pck = self.receive(0.5)
                 print r_pck
                 if r_pck != None:
-                    r_seqno, r_sum = self.check_packet(r_pck)
+                    r_seqno, r_sum, sacks = self.check_packet(r_pck)
+                    print sacks
             msg = next_msg
         return
 
@@ -100,7 +114,8 @@ class Sender(BasicSender.BasicSender):
                 r_pck = self.receive(0.5)
                 print "r_pck: ", r_pck
                 if r_pck != None:
-                    r_seqno, r_sum = self.check_packet(r_pck)
+                    #need sackMode from here
+                    r_seqno, r_sum = self.check_packet(r_pck, sackMode)
                     if r_seqno == end_seq + 1:
                         send_unfin = 0
                         break
@@ -118,8 +133,11 @@ class Sender(BasicSender.BasicSender):
             window, partition_unfin, end_seq = self.fill_window(window, partition_unfin, window_seqno,end_seq)
         return
 
+
+
     # Main sending loop.
     def start(self):
+        print self.sackMode
         print "handshake"
         seqno = randint(1, 2**31)
         pck = self.make_packet('syn', seqno, '')
@@ -130,11 +148,11 @@ class Sender(BasicSender.BasicSender):
             self.send(pck)
             r_pck = self.receive(0.5)
             if r_pck != None:
-                r_seqno, r_sum = self.check_packet(r_pck)
+                r_seqno, r_sum, sacks = self.check_packet(r_pck)
         print "handshake success"
 
         # self.stop_and_wait(seqno)
-        self.simple_window(seqno)   #with fast retransmit
+        # self.simple_window(seqno, self.sackMode)
         
         exit()
 
