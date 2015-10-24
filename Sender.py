@@ -131,11 +131,9 @@ class Sender(BasicSender.BasicSender):
             total_run = len(window) + fast_retransmit
             fast_retransmit = 0
             for i in range(total_run):
-                print "try receive ", i
                 r_pck = self.receive(0.5)
-                print "r_pck: ", r_pck
+                print "try receive:",i ,"th packet:", r_pck
                 if r_pck != None:
-                    #need sackMode from here
                     r_seqno, r_sum, sacks = self.check_packet(r_pck)
                     window = self.window_remove(r_seqno, sacks, window)
                     if r_seqno == end_seq + 1 and r_sum:
@@ -149,12 +147,20 @@ class Sender(BasicSender.BasicSender):
                         print "!!!!!!!!!!!!!!repeat", repeat
                         if repeat >= 3:
                             repeat = 0
-                            fast_retransmit = 1
+                            fast_retransmit = 0   #change handle later or now
                             for pck in window:
                                 if self.get_seq(pck) == r_seqno:
                                     self.send(pck)
                                     self.printsend(pck, re = True)
                                     break
+                            #handle now
+                            r_pck = self.receive(0.5)
+                            print "try receive resent packet:", r_pck
+                            if r_pck != None:
+                                r_seqno, r_sum, sacks = self.check_packet(r_pck)
+                                if r_sum:
+                                    window = self.window_remove(r_seqno, sacks, window)
+
 
 
             window, partition_unfin, end_seq, add_seq = self.fill_window(window, partition_unfin, window_seqno,end_seq, add_seq)
