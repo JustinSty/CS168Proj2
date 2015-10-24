@@ -131,6 +131,7 @@ class Sender(BasicSender.BasicSender):
             total_run = len(window) + fast_retransmit
             fast_retransmit = 0
             for i in range(total_run):
+                print "try receive ", i
                 r_pck = self.receive(0.5)
                 print "r_pck: ", r_pck
                 if r_pck != None:
@@ -152,8 +153,8 @@ class Sender(BasicSender.BasicSender):
                             for pck in window:
                                 if self.get_seq(pck) == r_seqno:
                                     self.send(pck)
+                                    self.printsend(pck, re = True)
                                     break
-                            self.printsend(window[0], re = True)
 
 
             window, partition_unfin, end_seq, add_seq = self.fill_window(window, partition_unfin, window_seqno,end_seq, add_seq)
