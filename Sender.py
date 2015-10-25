@@ -159,7 +159,7 @@ class Sender(BasicSender.BasicSender):
                             if r_pck != None:
                                 r_seqno, r_sum, sacks = self.check_packet(r_pck)
                                 if r_sum:
-                                    window = self.window_remove(r_seqno, sacks, window)
+                                    window = self.window_remove(r_seqno, [], window)
 
 
 
