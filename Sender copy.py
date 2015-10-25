@@ -14,15 +14,16 @@ class Sender(BasicSender.BasicSender):
         self.sackMode = sackMode
         self.debug = debug
 
-    def printsend(self, pck):
+
+    def printsend(self, pck, re = False):
         pieces = pck.split('|')
         msg_type, pck_seq = pieces[0:2]
         msg = '|'.join(pieces[2:-1])
         checksum = pieces[-1]
-        print "send ", msg_type, pck_seq, checksum
-        # print "+++++++++++++++++++++++++++++++++++++++++++"
-        # print msg
-        # print "*******************************************"
+        if re == True:
+            print "resend ", msg_type, pck_seq, checksum
+        else:
+            print "send ", msg_type, pck_seq, checksum
 
 
     def check_packet(self, r_pck):
@@ -70,13 +71,14 @@ class Sender(BasicSender.BasicSender):
                 print r_pck
                 if r_pck != None:
                     r_seqno, r_sum, sacks = self.check_packet(r_pck)
+                    print sacks
             msg = next_msg
         return
 
 
-    def fill_window(self, window, partition_unfin, window_seq, add_seq, end_seq):
+    def fill_window(self, window, partition_unfin, window_seq, end_seq, add_seq):
         while len(window) < 7 and partition_unfin:
-            msg = self.infile.read(1472)
+            msg = self.infile.read(1440)
             add_seq = add_seq + 1
             if (msg != ''):
                 pck = self.make_packet('dat', add_seq, msg)
@@ -90,53 +92,26 @@ class Sender(BasicSender.BasicSender):
                 pck = self.make_packet('fin', pck_seq, msg)
                 window.append(pck)
                 end_seq = pck_seq
-        return window, partition_unfin, add_seq, end_seq
+        return window, partition_unfin, end_seq, add_seq
 
     def get_seq(self, pck):
         pieces = pck.split('|')
-        seqno = int(pieces[1])
-        return seqno
+        return int(pieces[1])
+
+
+
+    def window_remove(self, seq, sacks, window):
+        remove = []
+        for pck in window:
+            pck_seq = self.get_seq(pck)
+            if pck_seq < seq or pck_seq in sacks:
+                remove.append(pck)
+        for pck in remove:
+            window.remove(pck)
+        return window
+
 
     def simple_window(self, seqno):
-        print "================window send data================"
-        window = []
-        window_seqno = seqno + 1
-        send_unfin = 1
-        partition_unfin = 1
-        end_seq = 0
-        msg_type = 'dat'
-        window, partition_unfin, end_seq = self.fill_window(window, partition_unfin, window_seqno, end_seq)
-        repeat = 0
-
-        while send_unfin:
-            for pck in window:
-                self.printsend(pck)
-                self.send(pck)
-            for i in range(len(window)):
-                r_pck = self.receive(0.5)
-                print "r_pck: ", r_pck
-                if r_pck != None:
-                    #need sackMode from here
-                    r_seqno, r_sum = self.check_packet(r_pck, sackMode)
-                    if r_seqno == end_seq + 1:
-                        send_unfin = 0
-                        break
-                    elif r_seqno > window_seqno and r_sum:
-                        for i in range(r_seqno - window_seqno):
-                            window.pop(0)
-                        window_seqno = r_seqno
-                    elif r_seqno == window_seqno and r_sum:
-                        repeat = repeat + 1
-                        # print "!!!!!!!!!!!!!!repeat", repeat
-                        if repeat >= 3:
-                            repeat = 0
-                            break
-
-            window, partition_unfin, end_seq = self.fill_window(window, partition_unfin, window_seqno,end_seq)
-        return
-
-
-    def sack_window(self, seqno):
         print "================window send data================"
         window = []
         window_seqno = seqno + 1
@@ -145,49 +120,56 @@ class Sender(BasicSender.BasicSender):
         add_seq = seqno
         end_seq = 0
         msg_type = 'dat'
-        window, partition_unfin, add_seq, end_seq = self.fill_window(window, partition_unfin, window_seqno, add_seq, end_seq)
+        window, partition_unfin, end_seq, add_seq = self.fill_window(window, partition_unfin, window_seqno, end_seq, add_seq)
         repeat = 0
+        fast_retransmit = 0
 
         while send_unfin:
             for pck in window:
                 self.printsend(pck)
                 self.send(pck)
-            for i in range(len(window)):
+            total_run = len(window) + fast_retransmit
+            fast_retransmit = 0
+            for i in range(total_run):
                 r_pck = self.receive(0.5)
-                print "r_pck: ", r_pck
+                print "try receive:",i ,"th packet:", r_pck
                 if r_pck != None:
-                    #need sackMode from here
                     r_seqno, r_sum, sacks = self.check_packet(r_pck)
-
-                    remove = []
-                    for pck in window:
-                        a = self.get_seq(pck)
-                        if a in sacks:
-                            remove.append(pck)
-                    for pck in remove:
-                        window.remove(pck)
-
-                    if r_seqno == end_seq + 1:
+                    window = self.window_remove(r_seqno, sacks, window)
+                    if r_seqno == end_seq + 1 and r_sum:
                         send_unfin = 0
                         break
                     elif r_seqno > window_seqno and r_sum:
-                        for i in range(r_seqno - window_seqno):
-                            if window != []:
-                                window.pop(0)
                         window_seqno = r_seqno
+                        repeat = 0
                     elif r_seqno == window_seqno and r_sum:
                         repeat = repeat + 1
-                        # print "!!!!!!!!!!!!!!repeat", repeat
+                        print "!!!!!!!!!!!!!!repeat", repeat
                         if repeat >= 3:
                             repeat = 0
-                            break
+                            fast_retransmit = 0   #change handle later or now
+                            for pck in window:
+                                if self.get_seq(pck) == r_seqno:
+                                    self.send(pck)
+                                    self.printsend(pck, re = True)
+                                    break
+                            #handle now
+                            r_pck = self.receive(0.5)
+                            print "try receive resent packet:", r_pck
+                            if r_pck != None:
+                                r_seqno, r_sum, sacks = self.check_packet(r_pck)
+                                if r_sum:
+                                    window = self.window_remove(r_seqno, [], window)
 
-            window, partition_unfin, add_seq, end_seq = self.fill_window(window, partition_unfin, window_seqno, add_seq, end_seq)
+
+            window, partition_unfin, end_seq, add_seq = self.fill_window(window, partition_unfin, window_seqno,end_seq, add_seq)
         return
+
 
 
     # Main sending loop.
     def start(self):
+        print self.sackMode
         print "handshake"
         seqno = randint(1, 2**31)
         pck = self.make_packet('syn', seqno, '')
