@@ -14,8 +14,8 @@ class Sender(BasicSender.BasicSender):
         self.sackMode = sackMode
         self.debug = debug
     
-    def printsend(self, pck, re = False, print_mode = 0):
-        if print_mode:
+    def printsend(self, pck, re = False, mode = 0):
+        if mode:
             pieces = pck.split('|')
             msg_type, pck_seq = pieces[0:2]
             msg = '|'.join(pieces[2:-1])
@@ -29,8 +29,18 @@ class Sender(BasicSender.BasicSender):
     def start(self):
         seqno = random.randint(1, 2**31)
         self.handshake(seqno)
-        self.simple_window(seqno)
+        msg_lists = self.read_file()
+        self.simple_window(seqno, msg_lists)
         exit()
+
+
+    def read_file(self):
+        msg = self.infile.read(1440)
+        msg_lists = []
+        while msg != '':
+            msg_lists.append(msg)
+            msg = self.infile.read(1440)
+        return msg_lists
 
 
     def handshake(self, seqno):
@@ -43,10 +53,10 @@ class Sender(BasicSender.BasicSender):
                 r_seqno, r_sum, sacks = self.check_packet(r_pck)
 
 
-    def simple_window(self, seqno):
+    def simple_window(self, seqno, msg_lists):
         window, window_seqno = [], seqno + 1
         send_unfin, msg_type = True, 'dat'
-        window, partition_unfin, end_seq, add_seq = self.fill_window(window, True, 0, seqno)
+        window, msgs, end_seq, add_seq = self.fill_window(window, msg_lists, 0, seqno)
         repeat = 0
         while send_unfin:
             r_pck = self.receive(0.5)
@@ -63,7 +73,7 @@ class Sender(BasicSender.BasicSender):
                         window_seqno = r_seqno
                         repeat = 0
                         window = self.window_remove(r_seqno, sacks, window)
-                        window, partition_unfin, end_seq, add_seq = self.fill_window(window, partition_unfin, end_seq, add_seq)
+                        window, msgs, end_seq, add_seq = self.fill_window(window, msgs, end_seq, add_seq)
                     if r_seqno == window_seqno:
                         repeat = repeat + 1
                         if repeat >= 3:
@@ -76,25 +86,20 @@ class Sender(BasicSender.BasicSender):
         return
 
 
-    def fill_window(self, window, partition_unfin, end_seq, add_seq):
-        while len(window) < 7 and partition_unfin:
-            msg = self.infile.read(1440)
-            if msg != '':
-                add_seq = add_seq + 1
+    def fill_window(self, window, msg_lists, end_seq, add_seq):
+        while len(window) < 7 and len(msg_lists) > 0:
+            msg = msg_lists.pop(0)
+            add_seq = add_seq + 1
+            if len(msg_lists) > 0:
                 pck = self.make_packet('dat', add_seq, msg)
                 window.append(pck)
                 self.send(pck)
             else:
-                partition_unfin = False
-                pck = window.pop()
-                pieces = pck.split('|')
-                pck_seqno = int(pieces[1])
-                msg = '|'.join(pieces[2:-1])
-                pck = self.make_packet('fin', pck_seqno, msg)
+                pck = self.make_packet('fin', add_seq, msg)
                 window.append(pck)
                 self.send(pck)
-                end_seq = pck_seqno
-        return window, partition_unfin, end_seq, add_seq
+                end_seq = add_seq
+        return window, msg_lists, end_seq, add_seq
 
 
     def get_seq(self, pck):
